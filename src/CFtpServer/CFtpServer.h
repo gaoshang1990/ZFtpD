@@ -534,9 +534,11 @@ public:
     void OnServerEventCb(int Event) const
     {
     }
+
     void OnUserEventCb(int Event, CFtpServer::CUserEntry* pUser, void* pArg = NULL) const
     {
     }
+
     void OnClientEventCb(int Event, CFtpServer::CClientEntry* pClient, void* pArg = NULL) const
     {
     }

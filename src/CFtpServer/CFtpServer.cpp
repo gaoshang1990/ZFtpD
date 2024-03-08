@@ -197,7 +197,6 @@ bool CFtpServer::StartListening(unsigned long ulAddr, unsigned short int usPort)
                 ret = false;
                 break;
             }
-            printf("ListeningSock success\n");
 
 #ifndef WIN32 // On win32, SO_REUSEADDR allow 2 sockets to listen on the same TCP-Port.
             if (setsockopt(this->ListeningSock, SOL_SOCKET, SO_REUSEADDR, (char*)&on, sizeof(on)) == SOCKET_ERROR) {
@@ -205,25 +204,21 @@ bool CFtpServer::StartListening(unsigned long ulAddr, unsigned short int usPort)
                 ret = false;
                 break;
             }
-            printf("setsockopt success\n");
 #endif
             if (bind(this->ListeningSock, (struct sockaddr*)&sin, sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
                 printf("bind error\n");
                 ret = false;
                 break;
             }
-            printf("bind success\n");
 
-            if (listen(ListeningSock, 0) == SOCKET_ERROR) {
+            if (listen(ListeningSock, 5) == SOCKET_ERROR) { /* xu 此处backlog设置为0, 在终端里无法建立tcp连接 */
                 printf("listen error\n");
                 ret = false;
                 break;
             }
-            printf("listen success\n");
         } while (0);
 
         if (ret == true) {
-            printf("ret is true\n");
             usListeningPort = usPort;
             bIsListening    = true;
             OnServerEventCb(START_LISTENING);
@@ -271,10 +266,11 @@ bool CFtpServer::StartAccepting(void)
         if (!IsAccepting() && IsListening()) {
 #ifdef WIN32
             hAcceptingThread = (HANDLE)_beginthreadex(NULL, 0, StartAcceptingEx, this, 0, &uAcceptingThreadID);
-            if (hAcceptingThread != 0) {
+            if (hAcceptingThread != 0)
 #else
-            if (pthread_create(&AcceptingThreadID, &m_pattrServer, StartAcceptingEx, this) == 0) {
+            if (pthread_create(&AcceptingThreadID, &m_pattrServer, StartAcceptingEx, this) == 0)
 #endif
+            {
                 OnServerEventCb(START_ACCEPTING);
                 bIsAccepting = true;
             }
@@ -283,7 +279,9 @@ bool CFtpServer::StartAccepting(void)
             }
         }
     }
+
     FtpServerLock.Leave();
+
     return bIsAccepting;
 }
 
@@ -302,27 +300,24 @@ void* CFtpServer::StartAcceptingEx(void* pvParam)
     SOCKET             ListeningSock = pFtpServer->ListeningSock;
 
     for (;;) {
-        printf("StartAcceptingEx\n");
-
         FD_ZERO(&fdRead);
         FD_SET(ListeningSock, &fdRead);
         if (select(ListeningSock + 1, &fdRead, NULL, NULL, NULL) == SOCKET_ERROR)
             break;
 
-        printf("Accepting\n");
         TempSock = accept(ListeningSock, (struct sockaddr*)&Sin, &Sin_len);
-        printf("Accepted, TempSock = %d\n", TempSock);
         if (TempSock != INVALID_SOCKET) {
             CFtpServer::CClientEntry* pClient = pFtpServer->AddClient(TempSock, &Sin);
             if (pClient != NULL) {
 #ifdef WIN32
                 pClient->hClientThread =
                     (HANDLE)_beginthreadex(NULL, 0, pClient->Shell, pClient, 0, &pClient->uClientThreadID);
-                if (pClient->hClientThread == 0) {
+                if (pClient->hClientThread == 0)
 #else
                 if (pthread_create(&pClient->ClientThreadID, &pFtpServer->m_pattrClient, pClient->Shell, pClient) != 0)
-                {
+
 #endif
+                {
                     delete pClient;
                     pFtpServer->OnServerEventCb(THREAD_ERROR);
                 }
@@ -640,7 +635,7 @@ bool CFtpServer::DeleteUser(CFtpServer::CUserEntry* pUser)
 
 CFtpServer::CClientEntry* CFtpServer::AddClient(SOCKET Sock, struct sockaddr_in* Sin)
 {
-    if (Sock != INVALID_SOCKET && &Sin) {
+    if (Sock != INVALID_SOCKET && Sin) {
 
         CFtpServer::CClientEntry* pClient = new CFtpServer::CClientEntry;
 

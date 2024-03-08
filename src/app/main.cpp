@@ -40,8 +40,8 @@ Add '-D_FILE_OFFSET_BITS=64' for large file support.
 #  define FTPSERVER_DIR "/home/sysadm/ftp"
 #endif
 
-#define USER_NAME   "test"
-#define USER_PASS   "pass"
+#define USER_NAME   "pwat"
+#define USER_PASS   "pwat123"
 #define SERVER_PORT 21
 
 #ifdef CFTPSERVER_ENABLE_EVENTS
