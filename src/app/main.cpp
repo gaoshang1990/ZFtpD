@@ -31,8 +31,7 @@ Add '-D_FILE_OFFSET_BITS=64' for large file support.
 */
 
 
-#define CFTPSERVER_CONFIG_H_PATH "./CFtpServerConfig.h"
-#include "../CFtpServer/CFtpServer.h"
+#include "CFtpServer.h"
 
 #ifdef _WIN32
 #  define FTPSERVER_DIR "C:\\"

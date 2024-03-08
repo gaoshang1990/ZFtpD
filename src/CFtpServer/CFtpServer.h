@@ -43,9 +43,7 @@
 #include <stdarg.h>
 #include <sys/stat.h>
 
-#ifdef CFTPSERVER_CONFIG_H_PATH
-#  include CFTPSERVER_CONFIG_H_PATH
-#endif
+#include "CFtpServerConfig.h"
 
 #ifdef CFTPSERVER_ENABLE_ZLIB
 #  include CFTPSERVER_ZLIB_H_PATH
