@@ -24,9 +24,13 @@
  *    you use this software in a commercial product, but is not required.
  */
 
+#include <regex>
+
+#include "hal_filesystem.h"
 
 #include "CFtpServer.h"
 #include "CFtpServerGlobal.h"
+
 
 /**
  * Portable function that sleeps for at least the specified interval.
@@ -226,7 +230,6 @@ bool CFtpServer::StartListening(unsigned long ulAddr, unsigned short int usPort)
         else if (ListeningSock != INVALID_SOCKET)
             CloseSocket(ListeningSock);
     }
-
     FtpServerLock.Leave();
 
     return bIsListening;
@@ -539,6 +542,7 @@ CFtpServer::CUserEntry* CFtpServer::AddUser(const char* pszLogin, const char* ps
         char* pszSDEx = strdup(pszStartDir);
         if (!pszSDEx)
             return NULL;
+
         SimplifyPath(pszSDEx);
         struct stat st; // Verify that the StartPath exist, and is a directory
         if (stat(pszSDEx, &st) != 0 || !S_ISDIR(st.st_mode)) {
@@ -547,9 +551,7 @@ CFtpServer::CUserEntry* CFtpServer::AddUser(const char* pszLogin, const char* ps
         }
 
         CFtpServer::CUserEntry* pUser = new CUserEntry;
-
         if (pUser) {
-
             strcpy(pUser->szLogin, pszLogin);
             strcpy(pUser->szStartDirectory, pszSDEx);
             free(pszSDEx);
@@ -569,7 +571,7 @@ CFtpServer::CUserEntry* CFtpServer::AddUser(const char* pszLogin, const char* ps
             UserListLock.Leave();
 
             pUser->bIsEnabled = true;
-            ++uiNumberOfUser;
+            uiNumberOfUser++;
 
             OnUserEventCb(NEW_USER, pUser, NULL);
 
@@ -578,6 +580,7 @@ CFtpServer::CUserEntry* CFtpServer::AddUser(const char* pszLogin, const char* ps
         else
             OnServerEventCb(MEM_ERROR);
     }
+
     return NULL;
 }
 
@@ -732,8 +735,7 @@ bool CFtpServer::CUserEntry::SetPrivileges(unsigned char ucPriv)
 CFtpServer::CUserEntry* CFtpServer::SearchUserFromLogin(const char* pszLogin)
 {
     if (pszLogin) {
-        CFtpServer::CUserEntry* pSearchUser = NULL;
-        pSearchUser                         = pFirstUser;
+        CFtpServer::CUserEntry* pSearchUser = pFirstUser;
         while (pSearchUser) {
             if (pSearchUser->szLogin && !strcmp(pszLogin, pSearchUser->szLogin)) {
                 break;
@@ -742,6 +744,7 @@ CFtpServer::CUserEntry* CFtpServer::SearchUserFromLogin(const char* pszLogin)
         }
         return pSearchUser;
     }
+
     return NULL;
 }
 
@@ -836,6 +839,43 @@ bool CFtpServer::CClientEntry::InitDelete()
 bool CFtpServer::CClientEntry::CheckPrivileges(unsigned char ucPriv) const
 {
     return (bIsLogged && pUser && (ucPriv & pUser->ucPrivileges) == ucPriv) ? true : false;
+}
+
+
+int deleteFilesMatchingRegex(const char* directory, const char* pattern)
+{
+    DirHandle dirp = file_open_dir(directory);
+    if (!dirp) {
+        printf("opendir() error");
+        return -1;
+    }
+
+    std::regex re(pattern);
+
+    while (true) {
+        const char* filename = file_read_dir(dirp, NULL);
+        printf("filename: %s\n", filename);
+        if (filename == nullptr)
+            break;
+
+        if (std::regex_match(filename, re)) {
+            std::string filepath = directory + std::string("/") + filename;
+            printf("filepath: %s\n", filepath.c_str());
+            if (file_delete(filepath.c_str()) == false) {
+                printf("remove() error: %s\n", filepath.c_str());
+            }
+            else {
+                printf("Deleted: %s\n", filepath.c_str());
+            }
+        }
+        else {
+            printf("Not match: file: %s, pattern: %s\n", filename, pattern);
+        }
+    }
+
+    file_close_dir(dirp);
+
+    return 0;
 }
 
 ////////////////////////////////////////
@@ -1487,20 +1527,17 @@ void* CFtpServer::CClientEntry::Shell(void* pvParam)
             continue;
         }
         else if (nCmd == CMD_DELE) {
-
             if (!pClient->CheckPrivileges(CFtpServer::DELETEFILE)) {
                 pClient->SendReply("550 Permission denied.");
                 continue;
             }
             if (pszCmdArg) {
+                // printf("DELE pszCmdArg: %s\n", pszCmdArg);
                 pszPath = pClient->BuildPath(pszCmdArg);
-                if (pszPath && stat(pszPath, &st) == 0 && S_ISREG(st.st_mode)) {
-                    if (remove(pszPath) != -1) {
-                        pClient->SendReply("250 DELE command successful.");
-                    }
-                    else
-                        pClient->SendReply("550 Can' t Remove or Access Error.");
-                }
+                // printf("DELE pszPath: %s\n", pszPath);
+
+                if (deleteFilesMatchingRegex(pClient->pUser->GetStartDirectory(), pszCmdArg) >= 0)
+                    pClient->SendReply("250 DELE command successful.");
                 else
                     pClient->SendReply("550 No such file.");
             }
@@ -2241,6 +2278,111 @@ bool CFtpServer::CClientEntry::InitZlib(DataTransfer_t* pTransfer)
 }
 #endif
 
+
+// 判断是否是UTF-8
+int is_str_utf8(const char* str)
+{
+    unsigned int  nBytes    = 0; // UFT8可用1-6个字节编码,ASCII用一个字节
+    unsigned char chr       = *str;
+    int           bAllAscii = true;
+    unsigned int  i;
+
+    for (i = 0; str[i] != '\0'; ++i) {
+        chr = *(str + i);
+        // 判断是否ASCII编码,如果不是,说明有可能是UTF8,ASCII用7位编码,最高位标记为0,0xxxxxxx
+        if (nBytes == 0 && (chr & 0x80) != 0) {
+            bAllAscii = false;
+        }
+        if (nBytes == 0) {
+            // 如果不是ASCII码,应该是多字节符,计算字节数
+            if (chr >= 0x80) {
+                if (chr >= 0xFC && chr <= 0xFD) {
+                    nBytes = 6;
+                }
+                else if (chr >= 0xF8) {
+                    nBytes = 5;
+                }
+                else if (chr >= 0xF0) {
+                    nBytes = 4;
+                }
+                else if (chr >= 0xE0) {
+                    nBytes = 3;
+                }
+                else if (chr >= 0xC0) {
+                    nBytes = 2;
+                }
+                else {
+                    return false;
+                }
+                nBytes--;
+            }
+        }
+        else {
+            // 多字节符的非首字节,应为 10xxxxxx
+            if ((chr & 0xC0) != 0x80) {
+                return false;
+            }
+            // 减到为零为止
+            nBytes--;
+        }
+    }
+    // 违返UTF8编码规则
+    if (nBytes != 0) {
+        return false;
+    }
+    if (bAllAscii) {
+        // 如果全部都是ASCII, 也是UTF8
+        return true;
+    }
+    return true;
+}
+
+// 判断是否是GBK
+int is_str_gbk(const char* str)
+{
+    unsigned int  nBytes    = 0; // GBK可用1-2个字节编码,中文两个 ,英文一个
+    unsigned char chr       = *str;
+    int           bAllAscii = true; // 如果全部都是ASCII,
+
+    unsigned int i;
+
+    printf("check code!\n");
+    for (i = 0; str[i] != '\0'; ++i) {
+        chr = *(str + i);
+        if ((chr & 0x80) != 0 && nBytes == 0) {
+            // 判断是否ASCII编码,如果不是,说明有可能是GBK
+            bAllAscii = false;
+        }
+        if (nBytes == 0) {
+            if (chr >= 0x80) {
+                if (chr >= 0x81 && chr <= 0xFE) {
+                    nBytes = +2;
+                }
+                else {
+                    return false;
+                }
+                nBytes--;
+            }
+        }
+        else {
+            if (chr < 0x40 || chr > 0xFE) {
+                return false;
+            }
+            nBytes--;
+        } // else end
+    }
+    if (nBytes != 0) { // 违返规则
+        return false;
+    }
+    if (bAllAscii) {
+        // 如果全部都是ASCII, 也是GBK
+        printf("gbk code!\n");
+        return true;
+    }
+    return true;
+}
+
+
 bool CFtpServer::CClientEntry::SafeWrite(int hFile, char* pBuffer, int nLen)
 {
     int wl = 0, k;
@@ -2297,6 +2439,17 @@ void* CFtpServer::CClientEntry::StoreThread(void* pvParam)
     }
 #endif
 
+    // if (is_str_gbk(pTransfer->szPath))
+    //     printf("path is gbk\n");
+    // if (is_str_utf8(pTransfer->szPath))
+    //     printf("path is utf8\n");
+
+
+    // printf("StoreThread: %s\n", pTransfer->szPath);
+    // char* szPath;
+    // gbk2utf8(&szPath, pTransfer->szPath, strlen(pTransfer->szPath));
+    // printf("StoreThread: %s\n", szPath);
+    // hFile = open(szPath, iflags, (int)0777);
     hFile = open(pTransfer->szPath, iflags, (int)0777);
 
     if (hFile >= 0) {

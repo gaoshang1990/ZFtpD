@@ -3,4 +3,9 @@
     "files.defaultLanguage": "c",
     "editor.formatOnType": true,
     "files.encoding": "gb2312",
+    "files.associations": {
+        "chrono": "cpp",
+        "filesystem": "cpp",
+        "xstring": "cpp"
+    },
 }

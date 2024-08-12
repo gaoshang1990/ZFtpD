@@ -34,9 +34,9 @@ Add '-D_FILE_OFFSET_BITS=64' for large file support.
 #include "CFtpServer.h"
 
 #ifdef _WIN32
-#  define FTPSERVER_DIR "C:\\"
+#  define FTPSERVER_DIR "D:\\"
 #else
-#  define FTPSERVER_DIR "/home/sysadm/ftp"
+#  define FTPSERVER_DIR "/home/root/ftp"
 #endif
 
 #define USER_NAME   "pwat"
@@ -201,12 +201,6 @@ int main(int argc, char* argv[])
     FtpServer.EnableModeZ(true);
 #endif
 
-#ifdef WIN32
-    CFtpServer::CUserEntry* pUser = FtpServer.AddUser(USER_NAME, USER_PASS, FTPSERVER_DIR);
-#else
-    CFtpServer::CUserEntry* pUser = FtpServer.AddUser(USER_NAME, USER_PASS, FTPSERVER_DIR);
-#endif
-
     CFtpServer::CUserEntry* pAnonymousUser = FtpServer.AddUser("anonymous", NULL, FTPSERVER_DIR);
     if (pAnonymousUser) {
         printf("-Anonymous user successfully created.\r\n");
@@ -215,12 +209,11 @@ int main(int argc, char* argv[])
     else
         printf("-Can't create anonymous user.\r\n");
 
+    CFtpServer::CUserEntry* pUser = FtpServer.AddUser(USER_NAME, USER_PASS, FTPSERVER_DIR);
     if (pUser) {
-
         printf("-User successfully created ! :)\r\n");
 
         pUser->SetMaxNumberOfClient(0); // Unlimited
-
         pUser->SetPrivileges(CFtpServer::READFILE | CFtpServer::WRITEFILE | CFtpServer::LIST | CFtpServer::DELETEFILE |
                              CFtpServer::CREATEDIR | CFtpServer::DELETEDIR);
 
@@ -233,11 +226,9 @@ int main(int argc, char* argv[])
         // If you only want to listen on the TCP Loopback interface,
         // replace 'INNADDR_ANY' by 'inet_addr("127.0.0.1")'.
         if (FtpServer.StartListening(INADDR_ANY, SERVER_PORT)) {
-
             printf("-Server is listening ! :)\r\n");
 
             if (FtpServer.StartAccepting()) {
-
                 printf("-Server successfuly started ! :)\r\n");
 
                 for (;;)
